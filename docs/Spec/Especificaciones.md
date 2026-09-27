@@ -1543,8 +1543,8 @@ Capacidades transversales que no pertenecen a una sola épica y que otras funcio
 
 | Campo | Valor |
 |---|---|
-| **Estado** | 00.TODO |
-| **Tiempo invertido** | 0h 0m |
+| **Estado** | 01.DESIGN |
+| **Tiempo invertido** | 0h 40m |
 | **Estimación** | — |
 | **Relacionado con** | — |
 
