@@ -64,17 +64,26 @@ El esquema se crea con `scripts/DB/DB.sql`, se evoluciona con `scripts/DB/migrat
 | `ENTRA_TENANT_ID` | Tenant corporativo de Entra ID (emisor y claves de firma) |
 | `ENTRA_API_CLIENT_ID` | Client id de `onewatch-api` (audiencia esperada) |
 | `ENTRA_API_SCOPE` | *Scope* requerido (`access_as_user`) |
-| `CORS_ALLOWED_ORIGINS` | Origen(es) del frontend |
+| `CORS_ALLOWED_ORIGINS` | Origen(es) del frontend, separados por comas |
 | `SLACK_SIGNING_SECRET` | Verificación de firma de la interactividad de Slack |
 | `BOT_USER_AGENT` | User-Agent de bot para validar feeds |
 
 Referencia completa en `.env.example`. En producción se configuran como App Settings de App Service. **Nunca** se versiona `.env` ni se escriben secretos en logs.
 
+La aplicación no arranca si faltan `ENTRA_TENANT_ID` o `ENTRA_API_CLIENT_ID`. Los valores (no son secretos) salen de los registros `onewatch-api` y `onewatch-spa` de Entra ID, que crea el proyecto de infraestructura.
+
+### Autenticación (ESP-14)
+
+- Todo `/api/v1` exige un token de acceso v2.0 de Entra ID para `onewatch-api` (firma RS256, emisor del tenant, audiencia, `exp`/`nbf` y *scope* `access_as_user`). Sin token o con token inválido → 401; token válido sin rol `admin`/`user` → 403. Solo `/health` es público.
+- Los routers de negocio se incluyen en `protected_router` (`src/api/v1/api_router.py`), que aplica `get_current_user` por defecto. Para restringir un endpoint por rol: `Depends(require_role(UserRole.ADMIN))`.
+- `GET /api/v1/auth/me` devuelve el usuario del token (`oid`, `email`, `name`, `role`). OneWatch no guarda usuarios ni tokens.
+- Para llamar a la API en local hace falta un token real del tenant: lo más sencillo es iniciar sesión en el frontend y copiar el token de la pestaña de red del navegador. Los tests no usan el tenant: firman sus tokens con una clave RSA local.
+
 ## Pruebas y calidad
 
 ```bash
-pytest tests/unit
-pytest tests/integration      # requiere BD y servicios configurados
+pytest -m unit
+pytest -m integration         # requiere BD y servicios configurados (ESP-14 no usa BD)
 ruff check .
 mypy src
 ```
