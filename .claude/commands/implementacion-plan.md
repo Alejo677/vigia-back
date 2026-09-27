@@ -91,8 +91,6 @@ workspace.
 2. `ruff check` en backend, corrige advertencias.
 3. Si cambiaron dependencias Python:
    `uv export --format requirements-txt --no-hashes --no-annotate --output-file requirements.txt`
-4. Commit con el key en el mensaje: `[<KEY_JIRA>] {descripción}` — **sólo commit
-   local**, nunca `push`: el desarrollador revisa antes de publicar
 
 ---
 
