@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "ultimo_actualizado": "2026-09-27T19:56:30",
+  "ultimo_actualizado": "2026-09-27T19:45:00",
   "consumo": [
     {
       "issue": "ESP-14",
@@ -35,6 +35,24 @@
             "cache_write_1h": 303465
           },
           "tiempo": "1210.4s"
+        }
+      ]
+    },
+    {
+      "issue": "PR1",
+      "fecha": "2026-09-27T19:45:00",
+      "modelos": [
+        {
+          "skill": "pr-review",
+          "modelo": "claude-sonnet-5",
+          "tokens": {
+            "input": 16,
+            "output": 20037,
+            "cache_read": 3007796,
+            "cache_write_5m": 0,
+            "cache_write_1h": 53162
+          },
+          "tiempo": "234.5s"
         }
       ]
     }
