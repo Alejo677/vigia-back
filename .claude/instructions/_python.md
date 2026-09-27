@@ -13,7 +13,7 @@ back/
     DB/
       DB.sql                  # DDL completo (único dueño del esquema, compartido con func/)
       migrations/             # scripts incrementales de esquema
-      seed/                   # datos iniciales: fuentes semilla, plantilla vigilancia/generico, usuario admin
+      seed/                   # datos iniciales: fuentes semilla, plantilla vigilancia/generico
     Azure/
     Deployment/
       config/
@@ -21,14 +21,14 @@ back/
     main.py                   # entrada FastAPI: crea app, registra routers, configura middleware
     api/
       v1/
-        routers/              # un router por recurso (auth, users, news_sources, prompt_templates, inventory, catalog, alerts, activity, slack)
+        routers/              # un router por recurso (auth, news_sources, prompt_templates, inventory, catalog, alerts, activity, slack)
     application/
       services/               # orquestadores: coordinan use cases y dependencias externas
       dtos/                   # Data Transfer Objects con los schemas de request/response (API y casos de uso)
       use_cases/              # un archivo por caso de uso; lógica de aplicación pura
     core/
       configuration/          # Settings con pydantic-settings; carga desde variables de entorno
-      dependencies/           # providers de FastAPI (get_db, get_current_user, require_admin, etc.)
+      dependencies/           # providers de FastAPI (get_db, get_current_user → valida el token de Entra ID, require_role, etc.)
       exceptions/             # excepciones de aplicación y handlers HTTP globales
     domain/
       entities/               # clases de dominio puras (sin ORM, sin Pydantic)
@@ -40,7 +40,7 @@ back/
         connection.py         # PostgreSQLConnection: pool singleton
         base_repository.py    # PostgreSQLBaseRepository: execute_query / execute_update
         repositories/         # implementaciones concretas de los repositorios del dominio
-      auth/                   # emisión/validación de JWT y hash de contraseñas (bcrypt)
+      auth/                   # validación de tokens de acceso de Entra ID (JWKS del tenant en caché, PyJWT[crypto]); no emite tokens
       feeds/                  # validación de feeds con feedparser (Probar feed / Validar ahora)
       slack/                  # verificación de firma y actualización de mensajes de Slack
   tests/
@@ -243,7 +243,7 @@ class CreateNewsSourceUseCase:
 * Orden de middleware: CORS → Auth → Errors → Routes.
 * `load_dotenv()` debe ser la primera línea de `src/main.py`.
 * El router no contiene lógica: solo recibe el Request, delega al caso de uso y devuelve el Response.
-* Todo router protegido declara `Depends(get_current_user)`; los del maestro de usuarios, `Depends(require_admin)`. El router de Slack usa en su lugar la dependencia de verificación de firma.
+* Todo router protegido declara `Depends(get_current_user)`; si un endpoint se restringe por rol, añade `Depends(require_role(UserRole.ADMIN))` (en el MVP ninguno). El router de Slack usa en su lugar la dependencia de verificación de firma.
 
 * Manejo de excepciones
 

@@ -1,0 +1,24 @@
+{
+  "version": "2.0",
+  "ultimo_actualizado": "2026-09-27T19:32:47",
+  "consumo": [
+    {
+      "issue": "ESP-14",
+      "fecha": "2026-09-27T19:32:47",
+      "modelos": [
+        {
+          "skill": "analisis-spec",
+          "modelo": "claude-opus-5-5",
+          "tokens": {
+            "input": 20,
+            "output": 29091,
+            "cache_read": 937304,
+            "cache_write_5m": 0,
+            "cache_write_1h": 133780
+          },
+          "tiempo": "256.8s"
+        }
+      ]
+    }
+  ]
+}

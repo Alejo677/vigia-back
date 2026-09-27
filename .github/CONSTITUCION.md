@@ -18,7 +18,7 @@
 | **Nombre** | OneWatch |
 | **Objetivo** | Motor de vigilancia tecnológica de IA: saber qué componentes usa cada aplicación, detectar qué cambia fuera (noticias, versiones, deprecaciones) y alertar a los responsables cuando un cambio afecta a sus aplicaciones |
 | **Plataforma base** | Microsoft Azure |
-| **Servicios núcleo** | Azure PostgreSQL Flexible Server · Azure OpenAI (clasificación de noticias) · Azure Functions · Azure App Service · Azure Container Registry · Azure Storage Account |
+| **Servicios núcleo** | Azure PostgreSQL Flexible Server · Azure OpenAI (clasificación de noticias) · Azure Functions · Azure App Service · Azure Container Registry · Azure Storage Account · Microsoft Entra ID (identidad de los usuarios) |
 | **Compute del backend (API REST)** | Azure App Service (contenedor Linux, imagen en Azure Container Registry) |
 | **Procesador de tareas programadas** | Una única Azure Function App (Timer Triggers) para la revisión de fuentes externas y la validación de impacto sobre las aplicaciones |
 | **Integraciones externas** | API de GitHub (repositorios, SBOM, contenido) · feeds RSS/Atom de las fuentes · Slack (webhook e interactividad) · SMTP |
@@ -45,10 +45,10 @@ Inventario y noticias solo se cruzan a través de los identificadores canónicos
 Una alerta o clasificación sin trazabilidad no es válida y debe rechazarse en QA.
 
 ### 2.3 Nunca se almacenan secretos
-El escaneo de código (ESP-03) nunca persiste valores de secretos: de una variable de entorno solo se guarda su nombre. Contraseñas solo con hash (`bcrypt` o equivalente), nunca en claro ni dentro del token. Tokens, claves y secretos nunca aparecen en logs, en BD en texto plano, en respuestas crudas ni en variables de cliente.
+El escaneo de código (ESP-03) nunca persiste valores de secretos: de una variable de entorno solo se guarda su nombre. OneWatch no almacena ni gestiona contraseñas de usuario: la autenticación se delega en Microsoft Entra ID (ESP-14). Tokens, claves y secretos nunca aparecen en logs, en BD, en respuestas crudas ni en variables de cliente; en el navegador solo existen los tokens que gestiona MSAL en `sessionStorage`.
 
 ### 2.4 Nada se borra si tiene histórico
-Aplicaciones, repositorios y componentes retirados se marcan **inactivos**; las instantáneas de SBOM se conservan; los usuarios se **desactivan**, nunca se eliminan; las valoraciones de alertas conservan su histórico; las plantillas de prompt conservan sus versiones anteriores. Solo se permite el borrado físico donde la especificación lo autoriza explícitamente (fuente sin noticias asociadas, plantilla que no es la última `generico` activa de su categoría).
+Aplicaciones, repositorios y componentes retirados se marcan **inactivos**; las instantáneas de SBOM se conservan; las valoraciones de alertas conservan su histórico; las plantillas de prompt conservan sus versiones anteriores. Solo se permite el borrado físico donde la especificación lo autoriza explícitamente (fuente sin noticias asociadas, plantilla que no es la última `generico` activa de su categoría).
 
 ### 2.5 Todos los procesos son idempotentes
 Ejecutar dos veces un proceso (`sync-apps`, `sync-catalog`, `import-sbom`, `scan-ai`, `resolve-usages`, `ingest-news`, `classify-news`, `correlate`, `send-digest`) sin cambios en la entrada no genera modificaciones, duplicados de noticias ni alertas repetidas para el mismo par noticia–aplicación.
@@ -66,10 +66,13 @@ Está **prohibido** hardcodear prompts, reglas de detección, fuentes o entradas
 Todas las validaciones de negocio se realizan en la aplicación (Python). La base de datos no contiene lógica (sin triggers, procedimientos ni funciones de negocio); solo restricciones de integridad (PK, FK, `UNIQUE`, `NOT NULL`).
 
 ### 2.8 Autorización vinculante en el backend
-Toda API exige un token válido; las rutas del maestro de usuarios exigen además el rol `admin`. Los guards y directivas de Angular son solo cosméticos: nunca sustituyen la validación del backend (ESP-14, Regla 5).
+Toda API exige un token de acceso de Microsoft Entra ID válido para la API de OneWatch (firma, emisor del tenant corporativo, audiencia, expiración y *scope*). Toda restricción por rol (*App Roles* `admin` / `user`) se aplica en el backend; los guards y directivas de Angular son solo cosméticos: nunca sustituyen la validación del backend (ESP-14, Regla 5).
 
 ### 2.9 Recolección respetuosa de fuentes externas
 Toda petición a fuentes externas (feeds y páginas) usa el User-Agent de bot identificable definido en ESP-06 y respeta `robots.txt`. Está **prohibido** sustituirlo por un User-Agent de navegador. Las llamadas a la API de GitHub respetan su rate limit (`x-ratelimit-remaining`, `x-ratelimit-reset`).
+
+### 2.10 OneWatch no administra usuarios
+La aplicación solo autentica (delegando en Microsoft Entra ID) y autoriza (según el *App Role* del token). Altas, cambios de rol y bajas se hacen exclusivamente en Entra ID. OneWatch no tiene pantallas, endpoints ni tablas de usuarios: la identidad y el rol salen del token en cada petición.
 
 ---
 
@@ -89,7 +92,7 @@ Los siguientes servicios constituyen el stack del proyecto y **no pueden sustitu
 | Persistencia operacional | Azure PostgreSQL Flexible Server |
 | Clasificación de noticias | Azure OpenAI (salida estructurada en JSON validada con Pydantic) |
 | Almacenamiento del runtime de la Function | Azure Storage Account (`AzureWebJobsStorage`) |
-| Autenticación y autorización de usuarios | Propia del sistema: JWT firmado + contraseñas con `bcrypt` (ESP-14) |
+| Autenticación y autorización de usuarios | Microsoft Entra ID (tenant corporativo): MSAL Angular en el frontend (código de autorización + PKCE), validación de tokens de acceso v2.0 en el backend y *App Roles* `admin` / `user` (ESP-14) |
 | Notificaciones | Slack (webhook entrante + interactividad) y SMTP |
 | Secretos y configuración en producción | App Settings de App Service / Function App (no se usa Key Vault) |
 
@@ -139,10 +142,10 @@ La generación de alertas (ESP-09) es determinista: cruza componentes afectados 
 Toda ejecución de un proceso programado o CLI (`sync-apps`, `import-sbom`, `scan-ai`, `ingest-news`, `classify-news`, `correlate`, …) queda registrada (proceso, resultado, duración) para la pantalla **Sistema › Actividad** (ESP-02), además del resumen que cada comando imprime en consola.
 
 ### 3.8 La interfaz web no sustituye a la configuración por archivo
-Aplicaciones, repositorios y catálogo se mantienen por archivo YAML y CLI. Las pantallas Inventario, Catálogo, Alertas y Actividad son de **consulta**; solo Fuentes de noticias, Plantillas de prompt y Usuarios son maestros editables desde la web. El botón **Nuevo componente** del prototipo queda sin implementar en el MVP.
+Aplicaciones, repositorios y catálogo se mantienen por archivo YAML y CLI. Las pantallas Inventario, Catálogo, Alertas y Actividad son de **consulta**; solo Fuentes de noticias y Plantillas de prompt son maestros editables desde la web. El botón **Nuevo componente** del prototipo queda sin implementar en el MVP.
 
 ### 3.9 Prohibiciones explícitas de implementación
-- Llamar a servicios externos (GitHub, Azure OpenAI, Slack, SMTP, feeds) desde el frontend.
+- Implementar autenticación propia (contraseñas, emisión de tokens), cualquier función de administración de usuarios, o aceptar un token sin validar firma, emisor, audiencia, expiración y *scope*.
 - Hardcodear prompts, reglas de detección o entradas de catálogo.
 - Persistir valores de secretos detectados en el código escaneado.
 - Duplicar la lógica de un proceso entre CLI y Timer Trigger.
@@ -177,9 +180,10 @@ Aplicaciones, repositorios y catálogo se mantienen por archivo YAML y CLI. Las 
 3. Valoración (Slack o `rate-alert`): útil, ruido (con motivo de lista cerrada) o resuelta; se conserva el histórico y prevalece la última. El endpoint de Slack verifica la firma de la petición.
 
 ### 4.5 Plataforma (ESP-14)
-1. Login con email y contraseña → el backend valida credenciales y usuario activo → emite JWT con `sub`, `email`, `role` y expiración. Mensaje único "Usuario o contraseña incorrectos" para credenciales inválidas o usuario desactivado.
-2. Token expirado o inválido → 401 y Angular redirige al login. Rol `user` sobre el maestro de usuarios → 403.
-3. Roles del MVP: `admin` y `user`. Ambos ven los mismos datos del dominio; solo `admin` accede al maestro de usuarios.
+1. Inicio de sesión con Microsoft → MSAL redirige a Entra ID (código de autorización + PKCE) → Entra ID emite un token de acceso para la API de OneWatch con el claim `roles` → Angular llama a `GET /api/v1/auth/me` → el backend valida el token y devuelve el usuario y su rol, sin persistir nada.
+2. Solo acceden las cuentas del tenant con un *App Role* de OneWatch asignado (aplicación empresarial con asignación obligatoria). Cuenta sin rol → pantalla "No tienes acceso a OneWatch"; token válido sin `roles` → 403.
+3. Token ausente, expirado o inválido (firma, emisor, audiencia o *scope*) → 401; Angular intenta renovarlo en silencio y, si no puede, redirige al inicio de sesión.
+4. Roles del MVP: `admin` y `user` (si llegan ambos, prevalece `admin`). En el MVP ambos ven las mismas pantallas y datos; el rol queda disponible para restricciones futuras, que se implementan en código (guard en Angular + dependencia de rol en el backend).
 
 ---
 
@@ -200,7 +204,10 @@ Las siguientes actividades están **explícitamente excluidas** del alcance actu
 - Preferencias de suscripción por usuario, Microsoft Teams y dashboard web de notificaciones.
 - Ajuste automático de reglas o prompts a partir de las valoraciones.
 - Pantalla de asignación de permisos, roles adicionales o permisos por aplicación/componente/fuente.
-- Registro autoservicio, recuperación de contraseña por email e inicio de sesión con proveedores externos (SSO, Google, Microsoft Entra ID).
+- Cualquier función de administración de usuarios en OneWatch (alta, edición, listado, cambio de rol o desactivación): se hace en Entra ID. Tampoco se guarda un registro de usuarios o accesos.
+- Contraseñas propias, registro autoservicio y recuperación de contraseña.
+- Proveedores de identidad distintos del tenant corporativo de Microsoft Entra ID (cuentas personales, Google, Entra External ID), acceso multi-tenant y revocación inmediata de sesiones (Continuous Access Evaluation).
+- Creación de los registros de aplicación y de la aplicación empresarial en Entra ID: la hace el proyecto de infraestructura, igual que el resto de recursos.
 - Function Apps, workers o servicios de cómputo adicionales para tareas de fondo (ver 3.2).
 - Despliegue en plataformas distintas de Microsoft Azure.
 - Aprovisionamiento de infraestructura Azure mediante IaC (Bicep/Terraform): la creación y configuración de los recursos es responsabilidad de otro proyecto.
@@ -234,8 +241,11 @@ Las siguientes actividades están **explícitamente excluidas** del alcance actu
 | **Valoración** | Opinión del responsable sobre una alerta: útil, ruido (con motivo) o resuelta. |
 | **Timer Trigger** | Disparador programado (CRON) de Azure Functions con el que la Function App ejecuta los procesos periódicos. |
 | **App Service** | Servicio PaaS de Azure (Web App for Containers) que aloja el backend FastAPI desde una imagen de Azure Container Registry. |
+| **Microsoft Entra ID** | Servicio de identidad corporativo de Microsoft. Autentica a los usuarios de OneWatch y emite los tokens de acceso con su rol. |
+| **App Role** | Rol definido en el registro de aplicación de la API de OneWatch en Entra ID (`admin`, `user`) y asignado a usuarios o grupos; llega al backend en el claim `roles` del token. |
+| **MSAL** | Microsoft Authentication Library. Librería del frontend Angular que inicia sesión contra Entra ID y obtiene y renueva los tokens de acceso. |
 | **Azure Container Registry (ACR)** | Registro privado de imágenes de contenedor del backend; App Service hace `pull` con Managed Identity. |
 
 ---
 
-*Última actualización: 2026-09-27 — Versión inicial adaptada a las especificaciones del MVP (ESP-01 … ESP-14)*
+*Última actualización: 2026-09-27 — Autenticación con Microsoft Entra ID sin administración de usuarios (ESP-14); sin restricción de llamadas externas desde el frontend*
