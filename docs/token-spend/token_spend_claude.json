@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "ultimo_actualizado": "2026-09-27T19:32:47",
+  "ultimo_actualizado": "2026-09-27T19:56:30",
   "consumo": [
     {
       "issue": "ESP-14",
@@ -17,6 +17,24 @@
             "cache_write_1h": 133780
           },
           "tiempo": "256.8s"
+        }
+      ]
+    },
+    {
+      "issue": "ESP-14",
+      "fecha": "2026-09-27T19:56:30",
+      "modelos": [
+        {
+          "skill": "implementacion-plan",
+          "modelo": "claude-sonnet-5",
+          "tokens": {
+            "input": 164,
+            "output": 70319,
+            "cache_read": 17664799,
+            "cache_write_5m": 0,
+            "cache_write_1h": 303465
+          },
+          "tiempo": "1210.4s"
         }
       ]
     }
