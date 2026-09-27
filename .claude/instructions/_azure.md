@@ -11,6 +11,7 @@
 | Azure OpenAI | Clasificación de noticias con salida estructurada en JSON (ESP-08) |
 | Azure Storage Account | `AzureWebJobsStorage` del runtime de la Function (locks de Timer Triggers) |
 | App Settings | Variables de entorno en producción de App Service y Function App (aplicación pequeña; no se usa Key Vault) |
+| Microsoft Entra ID | Identidad de los usuarios (ESP-14): registro de aplicación `onewatch-api` (*scope* `access_as_user`, *App Roles* `admin` / `user`), registro `onewatch-spa` (SPA, cliente público) y aplicación empresarial con asignación obligatoria. También provee las Managed Identities. Los registros los crea el proyecto de infraestructura |
 
 **Servicios externos (no Azure):**
 
@@ -25,10 +26,11 @@
 
 ## Identidad y secretos
 
-- **Entra ID no se usa para autenticar usuarios** (autenticación propia, ESP-14). Solo interviene como proveedor de las **Managed Identities** de App Service y Function App.
+- **Entra ID autentica a los usuarios** (ESP-14). El frontend obtiene tokens de acceso con MSAL; el backend los valida sin secretos (claves públicas del JWKS del tenant, en caché) comprobando firma, emisor, audiencia (`ENTRA_API_CLIENT_ID`), expiración y *scope*. OneWatch no emite tokens ni guarda contraseñas.
+- Roles como *App Roles* de `onewatch-api`, asignados a usuarios o, preferiblemente, a grupos en la aplicación empresarial. Con "Asignación obligatoria" activa, una cuenta sin rol no obtiene token.
+- El tiempo de vida del token lo fija Entra ID; una baja o un cambio de rol surte efecto al renovarse el token (no se usa Continuous Access Evaluation en el MVP).
 - Managed Identity asignada por sistema para acceder a los recursos Azure que lo admiten (ACR `AcrPull`, Storage, Azure OpenAI, PostgreSQL); sin claves estáticas cuando exista alternativa.
-- Secretos que no admiten Managed Identity (clave de firma JWT, token o credenciales de GitHub App, signing secret y webhook de Slack, credenciales SMTP) en App Settings marcados como valor sensible / *slot setting*; nunca en repositorio ni en logs.
-- La clave de firma JWT solo la conoce el backend.
+- Secretos que no admiten Managed Identity (token o credenciales de GitHub App, signing secret y webhook de Slack, credenciales SMTP) en App Settings marcados como valor sensible / *slot setting*; nunca en repositorio ni en logs. Los identificadores de Entra ID (tenant, client ids, *scope*) no son secretos.
 
 ---
 
@@ -169,8 +171,9 @@ tests/
 | Variable | Componente | Propósito |
 |---|---|---|
 | `DATABASE_URL` | back, func | Conexión PostgreSQL (Azure Flexible Server) |
-| `JWT_SIGNING_KEY` | back | Clave de firma del JWT (HS256) o clave privada (RS256) |
-| `JWT_EXPIRATION_MINUTES` | back | Tiempo de vida del token |
+| `ENTRA_TENANT_ID` | back | Tenant corporativo de Entra ID (emisor esperado y JWKS) |
+| `ENTRA_API_CLIENT_ID` | back | Client id de `onewatch-api` (audiencia esperada del token) |
+| `ENTRA_API_SCOPE` | back | *Scope* requerido en el claim `scp` (`access_as_user`) |
 | `CORS_ALLOWED_ORIGINS` | back | Origen(es) del frontend |
 | `SLACK_SIGNING_SECRET` | back | Verificación de firma de la interactividad de Slack |
 | `BOT_USER_AGENT` | back, func | User-Agent de bot para feeds y páginas |
@@ -191,10 +194,10 @@ Producción: App Settings de App Service y Function App
 
 ## Azure PostgreSQL
 
-- DDL completo en `back/scripts/DB/DB.sql` (único dueño del esquema, compartido por back y func); cambios incrementales en `back/scripts/DB/migrations/`; datos semilla en `back/scripts/DB/seed/` (10–15 fuentes, plantilla `vigilancia`/`generico`, usuario Administrador).
-- Las tablas definidas en las especificaciones (`news_source`, `prompt_template`, `app_user`) se crean exactamente con el DDL de la especificación; el resto se define en el análisis de cada ESP.
+- DDL completo en `back/scripts/DB/DB.sql` (único dueño del esquema, compartido por back y func); cambios incrementales en `back/scripts/DB/migrations/`; datos semilla en `back/scripts/DB/seed/` (10–15 fuentes, plantilla `vigilancia`/`generico`). No hay usuario semilla: el primer Administrador es quien tenga el *App Role* `admin` en Entra ID.
+- Las tablas definidas en las especificaciones (`news_source`, `prompt_template`) se crean exactamente con el DDL de la especificación; el resto se define en el análisis de cada ESP.
 - Solo restricciones de integridad (PK, FK, `UNIQUE`, `NOT NULL`, `DEFAULT`); sin triggers ni lógica (constitución §2.7).
-- Claves únicas relevantes: `key` de aplicación, `owner/nombre` de repositorio, identificador canónico de componente, alias normalizado, (categoría, identificador) de plantilla, email de usuario, (noticia, aplicación) de alerta.
+- Claves únicas relevantes: `key` de aplicación, `owner/nombre` de repositorio, identificador canónico de componente, alias normalizado, (categoría, identificador) de plantilla, (noticia, aplicación) de alerta.
 - Consulta/vista `component_usage_current` (uso vigente ⨝ repositorio ⨝ aplicación): base de ESP-09 y ESP-12.
 - Pool de conexiones: `PostgreSQLConnection` (singleton) en `src/infrastructure/postgresql/connection.py`.
 - Si el pool lanza `RuntimeError("Pool de conexiones no inicializado")`, verificar que `load_dotenv()` se ejecuta antes de instanciar cualquier repositorio.

@@ -1543,8 +1543,8 @@ Capacidades transversales que no pertenecen a una sola épica y que otras funcio
 
 | Campo | Valor |
 |---|---|
-| **Estado** | 00.TODO |
-| **Tiempo invertido** | 0h 0m |
+| **Estado** | 01.DESIGN |
+| **Tiempo invertido** | 0h 40m |
 | **Estimación** | — |
 | **Relacionado con** | — |
 
@@ -1745,8 +1745,8 @@ CREATE TABLE prompt_template (
 
 | Campo | Valor |
 |---|---|
-| **Estado** | 00.TODO |
-| **Tiempo invertido** | 0h 0m |
+| **Estado** | 02.DEVELOPS |
+| **Tiempo invertido** | 5h 0m |
 | **Estimación** | — |
 | **Relacionado con** | — |
 
@@ -1754,179 +1754,171 @@ CREATE TABLE prompt_template (
 
 **Como** administrador del sistema,
 
-**Quiero** que cada usuario inicie sesión y tenga asignado un rol, Administrador o Usuario,
+**Quiero** que cada usuario inicie sesión en OneWatch con su cuenta corporativa de Microsoft Entra ID y que la aplicación conozca su rol, Administrador o Usuario,
 
-**Para** controlar quién entra a la aplicación web y sentar la base de una autorización más fina en el futuro, sin construir todavía un motor de permisos.
+**Para** controlar quién entra a la aplicación web reutilizando la identidad corporativa (MFA, acceso condicional, altas y bajas centralizadas), sin gestionar usuarios ni contraseñas en OneWatch y sin construir todavía un motor de permisos.
 
 #### Descripción de UX
 
-**Prototipo:** https://dimly-woven-86209062.figma.site → menú lateral, sección **Sistema › Configuración**. Mismo enlace único que el resto del prototipo (sin rutas por pantalla). Aviso: hoy esa pantalla del prototipo es una vista genérica de configuración (con un dato "12 Usuarios" a modo de resumen) y no muestra todavía el login ni el maestro de usuarios que describe esta especificación; sirve solo como referencia de dónde debería alojarse.
+**Prototipo:** https://dimly-woven-86209062.figma.site. El prototipo no muestra todavía el inicio de sesión; esta especificación define su comportamiento.
 
-**Login:** pantalla con email y contraseña. Mensaje único ante credenciales incorrectas o usuario desactivado, sin distinguir el motivo.
+**Inicio de sesión:** OneWatch no tiene formulario de email y contraseña. Al abrir la aplicación sin sesión se muestra una pantalla de bienvenida con el botón **Iniciar sesión con Microsoft**, que redirige a la página de inicio de sesión de Microsoft Entra ID (con el MFA y las políticas de acceso condicional que tenga configuradas la organización). Tras autenticarse, Entra ID devuelve al usuario a OneWatch.
 
-**Cabecera de la aplicación:** muestra el nombre del usuario autenticado y un botón para cerrar sesión. No muestra el rol como algo accionable, porque en el MVP no hay nada que activar o desactivar desde la interfaz según el rol.
+**Sin acceso:** si la cuenta se autentica en Entra ID pero no tiene asignado ningún rol de OneWatch, se muestra la pantalla "No tienes acceso a OneWatch. Solicítalo a un administrador." con un botón para cerrar sesión.
 
-**Maestro de usuarios**, solo visible para Administradores, en el menú **Maestros › Usuarios**:
+**Cabecera de la aplicación:** muestra el nombre del usuario autenticado y un botón para cerrar sesión, que cierra la sesión de OneWatch y la de Entra ID. No muestra el rol como algo accionable.
 
-- Listado con las columnas Email, Nombre, Rol, Activo y Último acceso.
-- Botón **Nuevo usuario**.
-- Formulario: Email (único), Nombre, Rol (selector Administrador / Usuario), Activo (por defecto activo). La contraseña inicial se genera y se envía o se muestra una única vez; el propio usuario la cambia en su primer acceso (fuera de alcance del detalle de ese flujo en este MVP, ver más abajo).
-- Acciones por fila: Editar, Activar/Desactivar. No hay eliminación de usuarios, para conservar la auditoría de quién hizo cada cosa en el resto del sistema.
-
-No existe ninguna pantalla de asignación de permisos por pantalla, acción o dato. Qué contenido ve cada rol, más allá de este maestro, se resuelve en el código de la aplicación Angular.
+OneWatch no tiene ninguna pantalla de usuarios, roles ni permisos: no hay alta, edición, listado ni desactivación de usuarios.
 
 #### Descripción funcional
 
 **Propósito de la funcionalidad**
 
-Sentar las bases de sesión y roles (quién es el usuario y qué rol tiene) para que el resto del sistema y una futura autorización más fina partan de un usuario autenticado, sin construir ahora un motor de permisos configurable.
+Delegar la autenticación en Microsoft Entra ID y disponer en cada petición del usuario autenticado y su rol, para que el resto del sistema parta de una identidad corporativa y una futura autorización más fina pueda apoyarse en el rol, sin construir ahora un motor de permisos ni administrar usuarios.
 
-**Flujo principal (login)**
+**Flujo principal (inicio de sesión)**
 
-El usuario introduce email y contraseña → El backend valida las credenciales y que el usuario esté activo → Genera un token con el identificador del usuario y su rol → Angular guarda el token → Redirige a la pantalla principal.
-
-**Flujo principal (alta de usuario)**
-
-Un Administrador abre **Maestros › Usuarios** → Pulsa **Nuevo usuario** → Completa email, nombre y rol → Guarda → El sistema crea el usuario activo y genera su contraseña inicial.
+El usuario abre OneWatch → Pulsa **Iniciar sesión con Microsoft** → Angular (MSAL) lo redirige a Entra ID (flujo de código de autorización con PKCE) → El usuario se autentica en Entra ID → Entra ID devuelve a Angular un token de acceso para la API de OneWatch con los roles asignados → Angular llama a `GET /api/v1/auth/me` con ese token → El backend valida el token y devuelve el usuario y su rol → Angular muestra la pantalla principal.
 
 **Reglas de negocio**
 
-- Regla 1: Dos roles en el MVP: Administrador y Usuario. Todo usuario tiene exactamente uno.
-- Regla 2: Un usuario debe estar activo para iniciar sesión; uno desactivado no puede autenticarse aunque su contraseña sea correcta.
-- Regla 3: En el MVP, Administrador y Usuario ven las mismas pantallas y los mismos datos del dominio (fuentes, catálogo, noticias, alertas, plantillas de prompt...). La única distinción de rol es el acceso al propio maestro de usuarios, reservado a Administrador, porque sin esa restricción mínima cualquier usuario podría crear administradores.
-- Regla 4: Qué puede ver o hacer cada rol dentro de la aplicación, más allá de la Regla 3, no se gestiona desde ninguna pantalla de permisos. Se define en el código Angular (guards de ruta y directivas de rol) y cambiarlo implica modificar y desplegar de nuevo el frontend, no una configuración en caliente del sistema.
-- Regla 5: El backend no delega en el frontend la protección de sus endpoints: toda API exige un token válido y, en las rutas del maestro de usuarios, exige además el rol Administrador, aunque el frontend ya oculte esas pantallas al resto de usuarios.
-- Regla 6: Las contraseñas se guardan con hash (nunca en texto plano) y nunca viajan ni se guardan dentro del token.
-- Regla 7: El token expira; pasado su tiempo de vida, cualquier llamada a la API responde 401 y hay que iniciar sesión de nuevo.
-- Regla 8: Solo un Administrador puede crear un usuario nuevo o cambiar el rol de uno existente.
-- Regla 9: No se eliminan usuarios; se desactivan. Un usuario desactivado conserva su historial de altas y modificaciones en el resto del sistema.
+- Regla 1: Dos roles en el MVP: Administrador (`admin`) y Usuario (`user`), definidos como *App Roles* en el registro de aplicación de la API de OneWatch en Entra ID. Todo usuario con acceso tiene al menos uno; si tiene los dos (por ejemplo, por pertenecer a dos grupos), prevalece Administrador.
+- Regla 2: Solo pueden iniciar sesión las cuentas del tenant corporativo que tengan asignado un rol de OneWatch (la aplicación empresarial exige asignación). Una cuenta deshabilitada en Entra ID, o sin rol asignado, no puede acceder.
+- Regla 3: En el MVP, Administrador y Usuario ven las mismas pantallas y los mismos datos. El rol queda disponible en backend y frontend como base para restricciones futuras.
+- Regla 4: Qué puede ver o hacer cada rol no se gestiona desde ninguna pantalla de permisos. Se define en el código: guards de ruta y directivas de rol en Angular y dependencias de rol en el backend. Cambiarlo implica modificar y desplegar de nuevo, no una configuración en caliente.
+- Regla 5: El backend no delega en el frontend la protección de sus endpoints: toda API exige un token de acceso de Entra ID válido para la API de OneWatch, y cualquier restricción por rol que se añada en el futuro se aplica también en el backend, aunque el frontend ya oculte la pantalla.
+- Regla 6: OneWatch no almacena usuarios, contraseñas ni tokens. Los tokens de acceso nunca se guardan en la base de datos ni se escriben en logs.
+- Regla 7: El token expira según la política de Entra ID; MSAL lo renueva de forma silenciosa mientras la sesión de Entra ID siga activa. Una llamada con un token expirado o inválido responde 401 y hay que volver a iniciar sesión.
+- Regla 8: Altas, cambios de rol y bajas de usuarios se hacen exclusivamente en Entra ID (aplicación empresarial de OneWatch → **Usuarios y grupos**). OneWatch no ofrece ninguna función de administración de usuarios.
+- Regla 9: El usuario se identifica por su identificador de objeto de Entra ID (`oid`). La auditoría del resto de especificaciones (usuario de alta y de última modificación) guarda el email del token.
 
 **Flujos alternativos o de excepción**
 
-Caso 1: Credenciales inválidas. El sistema muestra "Usuario o contraseña incorrectos", sin indicar cuál de los dos falla.
+Caso 1: Credenciales inválidas, MFA fallido o bloqueo por acceso condicional. Lo gestiona Entra ID en su propia página; el usuario no llega a OneWatch.
 
-Caso 2: Usuario desactivado intenta iniciar sesión. Se muestra el mismo mensaje que en el Caso 1, para no revelar que la cuenta existe y está desactivada.
+Caso 2: Cuenta deshabilitada en Entra ID o sin rol de OneWatch asignado. Entra ID no emite el token para OneWatch y Angular muestra la pantalla "No tienes acceso a OneWatch". Si, por configuración, llegara un token sin el claim `roles`, la API responde 403 y Angular muestra la misma pantalla.
 
-Caso 3: Token expirado o inválido en una llamada a la API. La API responde 401 y Angular redirige a la pantalla de login.
+Caso 3: Token expirado o inválido en una llamada a la API. La API responde 401; Angular intenta renovar el token de forma silenciosa y, si no puede, redirige a la pantalla de inicio de sesión.
 
-Caso 4: Un usuario con rol Usuario intenta acceder por URL directa al maestro de usuarios o llamar a su API. La pantalla no se muestra y la API responde 403.
-
-Caso 5: Email duplicado al crear un usuario. No se guarda y se muestra el error en el campo email.
+Caso 4: Se retira el rol a un usuario en Entra ID con una sesión abierta. El cambio se aplica cuando su token caduca y se renueva (como máximo, el tiempo de vida del token configurado en Entra ID).
 
 **Punto de entrada**
 
-Pantalla de login de la aplicación web. Toda la aplicación exige sesión iniciada, salvo esa pantalla.
+Pantalla de bienvenida con el botón **Iniciar sesión con Microsoft**. Toda la aplicación exige sesión iniciada, salvo esa pantalla.
 
 **Sistemas / Servicios afectados**
 
-Ninguno externo; autenticación propia del sistema en el MVP.
+- Microsoft Entra ID: dos registros de aplicación (SPA de Angular y API del backend) y la aplicación empresarial de la API con asignación obligatoria. Su creación es responsabilidad del proyecto de infraestructura (fuera de alcance de OneWatch, constitución §5), y la asignación de usuarios y grupos a los roles la hacen los administradores de Entra ID.
 
 **Persistencia de datos**
 
-- Usuario: email, nombre, hash de contraseña, rol, activo, fecha de alta, fecha del último acceso.
-
-**Notas sobre la interfaz**
-
-Se entrega un usuario Administrador semilla mediante el script de datos iniciales, para poder entrar la primera vez y dar de alta al resto de usuarios.
+Ninguna. OneWatch no guarda usuarios: la identidad y el rol salen del token en cada petición.
 
 **Fuera de alcance**
 
-- Pantalla de asignación de permisos por pantalla, acción o dato: los cambios de qué ve o hace cada rol se implementan editando el código Angular, no configurando el sistema.
-- Autoservicio de registro y recuperación de contraseña por email.
-- Inicio de sesión con proveedores externos (SSO, Google, Microsoft Entra ID...).
+- Cualquier función de administración de usuarios en OneWatch: alta, edición, listado, cambio de rol o desactivación (se hace en Entra ID).
+- Pantalla de asignación de permisos por pantalla, acción o dato.
+- Contraseñas propias, registro autoservicio y recuperación de contraseña.
+- Proveedores de identidad distintos del tenant corporativo de Entra ID (cuentas personales de Microsoft, Google, Entra External ID) y acceso multi-tenant.
+- Revocación inmediata de sesiones (Continuous Access Evaluation); una baja surte efecto al caducar el token.
 - Roles adicionales o permisos por aplicación, componente o fuente (por ejemplo, un responsable que solo vea sus propias aplicaciones).
-- Auditoría detallada de acciones por usuario, más allá de la fecha y el usuario de alta y modificación que ya registran el resto de especificaciones.
+- Registro de accesos o auditoría detallada de acciones por usuario, más allá de la fecha y el usuario de alta y modificación que ya registran el resto de especificaciones.
 
 #### Criterios de aceptación
 
 ```gherkin
-Escenario: Login correcto
-  Dado un usuario activo con rol "Usuario" y credenciales válidas
-  Cuando inicia sesión
+Escenario: Inicio de sesión correcto
+  Dado un usuario del tenant con el rol "Usuario" asignado en la aplicación empresarial de OneWatch
+  Cuando inicia sesión con Microsoft
   Entonces accede a la aplicación
   Y ve las mismas pantallas de datos que un Administrador
+  Y la cabecera muestra su nombre
 
-Escenario: Login con usuario desactivado
-  Dado un usuario desactivado con credenciales correctas
-  Cuando intenta iniciar sesión
-  Entonces el sistema muestra "Usuario o contraseña incorrectos"
-  Y no se genera ningún token
+Escenario: Usuario sin rol asignado
+  Dado un usuario del tenant sin ningún rol de OneWatch asignado
+  Cuando intenta iniciar sesión con Microsoft
+  Entonces no obtiene un token para la API de OneWatch
+  Y el sistema muestra "No tienes acceso a OneWatch"
 
-Escenario: Acceso al maestro de usuarios sin ser Administrador
-  Dado un usuario autenticado con rol "Usuario"
-  Cuando intenta acceder a "Maestros › Usuarios"
-  Entonces no ve esa opción en el menú
-  Y una llamada directa a su API responde 403
+Escenario: Token sin rol
+  Dado un token de acceso válido para la API de OneWatch sin el claim "roles"
+  Cuando se llama a cualquier API protegida
+  Entonces responde 403
+
+Escenario: Token de otra audiencia o de otro tenant
+  Dado un token firmado por Entra ID pero emitido para otra aplicación o por otro tenant
+  Cuando se llama a cualquier API protegida
+  Entonces responde 401
+
+Escenario: Petición sin token
+  Dado un cliente sin sesión iniciada
+  Cuando llama a cualquier API protegida sin cabecera Authorization
+  Entonces responde 401
+
+Escenario: Token expirado
+  Dado un usuario con sesión iniciada cuyo token ha expirado y no se puede renovar
+  Cuando llama a cualquier API protegida
+  Entonces recibe 401
+  Y Angular lo redirige a la pantalla de inicio de sesión
+
+Escenario: Rol recibido desde Entra ID
+  Dado un usuario con los roles "Usuario" y "Administrador" asignados en Entra ID
+  Cuando inicia sesión y la aplicación consulta su perfil
+  Entonces el rol devuelto es "Administrador"
 
 Escenario: Cambiar qué ve un rol es un cambio de código
   Dado que se quiere que el rol "Usuario" deje de ver el listado de alertas
   Cuando se implementa ese cambio
-  Entonces se hace modificando el guard de ruta en el código Angular
+  Entonces se hace añadiendo el guard de ruta en Angular y la dependencia de rol en el endpoint del backend
   Y no existe ninguna pantalla del sistema para configurarlo
 
-Escenario: Token expirado
-  Dado un usuario con sesión iniciada cuyo token ha expirado
-  Cuando llama a cualquier API protegida
-  Entonces recibe 401
-  Y Angular lo redirige a la pantalla de login
-
-Escenario: Alta de usuario por un Administrador
-  Dado que un Administrador está en "Maestros › Usuarios"
-  Cuando crea un usuario con rol "Usuario"
-  Entonces el usuario queda activo
-  Y puede iniciar sesión con la contraseña generada
+Escenario: Cierre de sesión
+  Dado un usuario con sesión iniciada
+  Cuando pulsa "Cerrar sesión"
+  Entonces se cierra su sesión en OneWatch y en Entra ID
+  Y vuelve a la pantalla de bienvenida
 ```
 
 #### Descripción técnica
 
-**Autenticación**
+**Registros en Microsoft Entra ID** (los crea el proyecto de infraestructura)
 
-- Token JWT firmado (HS256 o RS256) con los claims `sub` (id de usuario), `email`, `role` y expiración.
-- El backend valida el token en cada endpoint protegido mediante una dependencia común; las rutas del maestro de usuarios añaden además una dependencia que exige `role = admin`.
-- Contraseñas con hash `bcrypt` (o equivalente) y coste adecuado; nunca se registran en claro en logs ni en la respuesta cruda de ninguna otra especificación.
+| Registro | Tipo | Configuración |
+| --- | --- | --- |
+| `onewatch-api` | API web | *Application ID URI* `api://<client-id>`; *scope* delegado `access_as_user`; *App Roles* `admin` y `user` (tipo de miembro: usuarios/grupos); `accessTokenAcceptedVersion = 2` |
+| `onewatch-spa` | Aplicación de página única (SPA) | *Redirect URIs* de cada entorno; permiso delegado sobre `api://<client-id>/access_as_user`; sin secretos (cliente público) |
+| Aplicación empresarial de `onewatch-api` | Enterprise app | "Asignación obligatoria" = Sí; usuarios o grupos asignados a `admin` o `user` |
 
-**Autorización en Angular**
+**Autenticación en el backend**
 
-- Interceptor HTTP que añade el token a cada llamada y captura las respuestas 401 para redirigir al login.
-- `roleGuard` de ruta, aplicado manualmente en la configuración de rutas (`app.routes.ts`) de las pantallas que se quieran restringir; en el MVP, solo en las rutas del maestro de usuarios. Añadir o quitar una restricción a otra pantalla es una modificación de este archivo, no de datos.
-- El rol del usuario autenticado se expone en un servicio de sesión (por ejemplo, `AuthService.role()`) para que guards y directivas lo consulten sin duplicar la lógica.
+- El backend **no emite tokens ni guarda usuarios**: valida los tokens de acceso v2.0 de Entra ID en cada endpoint protegido mediante una dependencia común que devuelve el usuario autenticado (`oid`, email, nombre, rol).
+- Validación: firma RS256 contra las claves públicas del tenant (JWKS de `https://login.microsoftonline.com/<tenant-id>/discovery/v2.0/keys`, en caché y refrescadas ante un `kid` desconocido), emisor `https://login.microsoftonline.com/<tenant-id>/v2.0`, audiencia = client id de `onewatch-api`, `exp`/`nbf` y *scope* `access_as_user` en `scp`.
+- Claims usados: `oid` (identificador del usuario), `preferred_username` o `email` (email), `name` (nombre) y `roles` (rol; si contiene `admin`, prevalece).
+- Token válido sin `roles` reconocidos → 403. Ausente o con firma, emisor, audiencia, *scope* o expiración inválidos → 401.
+- Se provee una dependencia de rol (`require_role(UserRole.ADMIN)`) para restringir endpoints cuando se necesite; en el MVP ningún endpoint la usa.
+- La librería de validación (por ejemplo, `PyJWT[crypto]` con `PyJWKClient`) queda aislada tras una interfaz de dominio para poder probar con tokens firmados con una clave de pruebas.
 
-**Modelo de datos en PostgreSQL**
+**Autenticación y autorización en Angular**
 
-Tabla `app_user`:
-
-| Columna | Tipo | Nulo | Por defecto | Descripción |
-| --- | --- | --- | --- | --- |
-| `id` | `UUID` | No | `gen_random_uuid()` | Clave primaria técnica |
-| `email` | `VARCHAR(200)` | No | — | Único, se usa para iniciar sesión |
-| `name` | `VARCHAR(200)` | No | — | Nombre visible |
-| `password_hash` | `VARCHAR(200)` | No | — | Hash de la contraseña |
-| `role` | `VARCHAR(20)` | No | `'user'` | `admin` o `user` |
-| `enabled` | `BOOLEAN` | No | `TRUE` | Usuario activo o desactivado |
-| `created_at` | `TIMESTAMPTZ` | No | `now()` | Fecha de alta |
-| `last_login_at` | `TIMESTAMPTZ` | Sí | — | Fecha del último inicio de sesión correcto |
-
-```sql
-CREATE TABLE app_user (
-    id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-    email           VARCHAR(200)  NOT NULL UNIQUE,
-    name            VARCHAR(200)  NOT NULL,
-    password_hash   VARCHAR(200)  NOT NULL,
-    role            VARCHAR(20)   NOT NULL DEFAULT 'user',
-    enabled         BOOLEAN       NOT NULL DEFAULT TRUE,
-    created_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    last_login_at   TIMESTAMPTZ
-);
-```
+- `@azure/msal-angular` + `@azure/msal-browser`, flujo de código de autorización con PKCE, `cacheLocation: sessionStorage`.
+- `MsalInterceptor` que añade el token de acceso con *scope* `api://<client-id>/access_as_user` a las llamadas a `apiUrl`; ante un 401 que no se resuelve con renovación silenciosa, redirige al inicio de sesión.
+- `MsalGuard` (o `authGuard` sobre `MsalService`) para toda la aplicación salvo la pantalla de bienvenida.
+- `roleGuard` de ruta y directiva de rol disponibles para restringir pantallas u opciones editando `app.routes.ts` o las plantillas; en el MVP no se aplican a ninguna ruta.
+- El rol se obtiene de `GET /api/v1/auth/me` y se expone en un servicio de sesión (`AuthService.role()`) para que guards y directivas lo consulten sin duplicar la lógica.
 
 **API**
 
 | Método | Ruta | Uso |
 | --- | --- | --- |
-| POST | `/api/auth/login` | Autentica y devuelve el token |
-| POST | `/api/auth/logout` | Invalida la sesión del lado del cliente |
-| GET | `/api/users` | Listado de usuarios (solo Administrador) |
-| GET | `/api/users/{id}` | Detalle (solo Administrador) |
-| POST | `/api/users` | Alta (solo Administrador) |
-| PUT | `/api/users/{id}` | Modificación (solo Administrador) |
-| PATCH | `/api/users/{id}/enabled` | Activar/Desactivar (solo Administrador) |
+| GET | `/api/auth/me` | Devuelve el usuario autenticado (email, nombre, rol) a partir del token. No persiste nada |
+
+No hay endpoints de login, logout ni de usuarios: el inicio y cierre de sesión los resuelve MSAL contra Entra ID.
+
+**Configuración**
+
+| Variable | Componente | Propósito |
+| --- | --- | --- |
+| `ENTRA_TENANT_ID` | back | Tenant corporativo (emisor esperado y JWKS) |
+| `ENTRA_API_CLIENT_ID` | back | Client id de `onewatch-api` (audiencia esperada) |
+| `ENTRA_API_SCOPE` | back | *Scope* requerido en `scp` (`access_as_user`) |
+| `entra.tenantId`, `entra.spaClientId`, `entra.apiScope`, `entra.redirectUri` | front (`environment.ts`) | Configuración de MSAL; no son secretos |

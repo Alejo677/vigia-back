@@ -77,6 +77,7 @@ async def test_classify_news_with_pypi_adapter_data_and_no_alert_words_skips_llm
 - Usan conexión real a PostgreSQL (variables en `.env`).
 - Para GitHub, feeds y Azure OpenAI se usan endpoints reales en un entorno de pruebas o fixtures grabadas, salvo que el ticket indique lo contrario. Nunca se envían mensajes reales a Slack ni emails reales desde los tests.
 - Los endpoints del backend se prueban con el cliente de pruebas de FastAPI, incluyendo token válido, token expirado y rol insuficiente.
+- Los tokens de Entra ID de los tests se firman con una clave RSA de pruebas y el validador se configura con su JWKS local (emisor y audiencia de pruebas). Nunca se obtienen tokens del tenant real ni se desactiva la validación de firma en los tests.
 - No limpian datos — el estado persistente es intencional para facilitar debugging.
 - Ejecutar con `pytest -m integration` (requiere BD disponible).
 
@@ -94,7 +95,7 @@ async def test_classify_news_with_pypi_adapter_data_and_no_alert_words_skips_llm
 
 | Área | Tipo | Por qué |
 |---|---|---|
-| Autenticación: 401 sin token o con token expirado, 403 del maestro de usuarios para rol `user`, usuario desactivado no inicia sesión | Integración | Seguridad crítica (constitución §2.8, ESP-14) |
+| Autenticación con Entra ID: 401 sin token, con token expirado, con firma, emisor, audiencia o *scope* incorrectos; 403 con token sin `roles`; `require_role` devuelve 403 con rol insuficiente; con ambos roles prevalece `admin` | Integración | Seguridad crítica (constitución §2.8, ESP-14) |
 | Verificación de firma de Slack en la interactividad | Integración | Endpoint expuesto sin JWT |
 | `scan-ai` nunca guarda valores de secretos (solo nombre de variable) | Unitario | Principio inmutable §2.3 |
 | Componentes del LLM fuera del catálogo se descartan | Unitario | Principio inmutable §2.1 |
