@@ -32,7 +32,11 @@ async def _unavailable_handler(_: Request, __: Exception) -> JSONResponse:
 
 
 async def _internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error("❌ Error no controlado", extra={"path": request.url.path, "error": type(exc).__name__})
+    logger.error(
+        "❌ Error no controlado",
+        extra={"path": request.url.path, "error": type(exc).__name__},
+        exc_info=exc,
+    )
     return JSONResponse(status_code=500, content={"detail": INTERNAL_ERROR_DETAIL})
 
 

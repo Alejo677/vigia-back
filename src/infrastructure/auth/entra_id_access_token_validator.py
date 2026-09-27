@@ -82,7 +82,9 @@ class EntraIdAccessTokenValidator(IAccessTokenValidator):
         """
         try:
             kid = self._read_kid(raw_token)
-            signing_key: PyJWK = await asyncio.to_thread(self._jwks_client.get_signing_key, kid)
+            signing_key = self._cached_signing_key(kid)
+            if signing_key is None:
+                signing_key = await asyncio.to_thread(self._jwks_client.get_signing_key, kid)
             payload = self._decode(raw_token, signing_key)
         except MissingRequiredClaimError as e:
             reason = (
@@ -103,6 +105,25 @@ class EntraIdAccessTokenValidator(IAccessTokenValidator):
         if not isinstance(kid, str) or not kid:
             raise DecodeError("Cabecera sin kid")
         return kid
+
+    def _cached_signing_key(self, kid: str) -> PyJWK | None:
+        """Busca la clave ya en la caché en memoria del JWKS, sin tocar la red.
+
+        Evita el salto a un hilo (`asyncio.to_thread`) en el caso común de un `kid`
+        ya conocido; solo cuando esto devuelve `None` hace falta ir a `PyJWKClient`.
+
+        Args:
+            kid: identificador de la clave del token.
+
+        Returns:
+            La clave si ya está en la caché vigente, o `None` si no (cache fría o `kid` no visto).
+        """
+        cache = self._jwks_client.jwk_set_cache
+        jwk_set = cache.get() if cache is not None else None
+        if jwk_set is None:
+            return None
+        signing_keys = [key for key in jwk_set.keys if key.public_key_use in ("sig", None)]
+        return self._jwks_client.match_kid(signing_keys, kid)
 
     def _decode(self, raw_token: str, signing_key: PyJWK) -> dict[str, Any]:
         payload: dict[str, Any] = jwt.decode(

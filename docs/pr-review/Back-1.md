@@ -10,27 +10,31 @@
 
 ## Resumen ejecutivo
 
-El PR implementa la validación de tokens de acceso de Microsoft Entra ID en el backend (ESP-14): validador JWT contra el JWKS del tenant, resolución de rol, protección por defecto de `/api/v1` y el endpoint `GET /auth/me`. La arquitectura respeta la separación por capas de la constitución (dominio sin dependencias de infraestructura, casos de uso con su propia excepción, cascada de excepciones hasta handlers HTTP globales) y la cobertura de tests es notablemente sólida, incluyendo casos de seguridad no triviales (confusión de algoritmo, `kid` desconocido, límite de refresco del JWKS). No se encontró ningún bloqueante. Hay un hallazgo de observabilidad real (el handler de errores 500 no registra la traza) y una sugerencia de eficiencia menor. Recomendación: **aprobar con sugerencias**.
+El PR implementa la validación de tokens de acceso de Microsoft Entra ID en el backend (ESP-14): validador JWT contra el JWKS del tenant, resolución de rol, protección por defecto de `/api/v1` y el endpoint `GET /auth/me`. La arquitectura respeta la separación por capas de la constitución (dominio sin dependencias de infraestructura, casos de uso con su propia excepción, cascada de excepciones hasta handlers HTTP globales) y la cobertura de tests es notablemente sólida, incluyendo casos de seguridad no triviales (confusión de algoritmo, `kid` desconocido, límite de refresco del JWKS). No se encontró ningún bloqueante. Hay un hallazgo de observabilidad real (el handler de errores 500 no registra la traza) y una sugerencia de eficiencia menor.
+
+> **Actualización:** ambos hallazgos (1 importante, 1 sugerencia) se han corregido y verificado — ver el detalle marcado "✅Resuelto" en cada comentario. Recomendación revisada: **aprobar**.
 
 ---
 
 ## Comentarios de revisión
 
-🟡 **IMPORTANTE — El handler de errores no controlados no registra la traza**
+🟡 **IMPORTANTE — ✅Resuelto — El handler de errores no controlados no registra la traza**
 
 - **Archivo:** `src/core/exceptions/handlers.py` (líneas 22–24, función `_internal_error_handler`)
 - **Problema:** `logger.error("❌ Error no controlado", extra={"path": request.url.path, "error": type(exc).__name__})` registra solo la ruta y el **nombre de la clase** de la excepción, nunca su mensaje ni la traza (`exc_info`). Es exactamente el handler que se dispara ante fallos genuinamente inesperados (`Exception` genérica) — el único que atrapa lo que nadie prevé.
 - **Sugerencia:** `logger.error(..., exc_info=exc)` o `logger.exception(...)` dentro del handler, para que la traza completa quede en el log aunque el cliente solo reciba el `"Error interno"` genérico.
 - **Por qué importa:** Sin traza ni mensaje, un 500 en producción se reduce a "pasó una `KeyError` en `/api/v1/algo`" — no hay forma de saber en qué línea ni por qué sin reproducirlo a mano. Es justo el escenario donde más se necesita el log.
+- **Resolución:** Añadido `exc_info=exc` a `logger.error(...)` en `_internal_error_handler`. La traza completa queda en el log; el cliente sigue recibiendo solo `"Error interno"`.
 
 ---
 
-🔵 **SUGERENCIA — `asyncio.to_thread` en cada petición aunque la clave ya esté en caché**
+🔵 **SUGERENCIA — ✅Resuelto — `asyncio.to_thread` en cada petición aunque la clave ya esté en caché**
 
 - **Archivo:** `src/infrastructure/auth/entra_id_access_token_validator.py` (línea 82)
 - **Problema:** `await asyncio.to_thread(self._jwks_client.get_signing_key, kid)` se ejecuta para **toda** petición autenticada, incluso cuando la clave ya está en la caché en memoria de `PyJWKClient` (el caso normal: `kid` no cambia salvo rotación del tenant). Delegar a un hilo del *executor* por defecto tiene un coste fijo de creación/entrega que no aporta nada cuando la operación real es una búsqueda en un diccionario ya cacheado.
 - **Sugerencia:** Si el volumen de peticiones concurrentes lo justifica, comprobar primero si la clave ya está en la caché (`get_signing_keys()` sin forzar refresco es síncrono y barato) y reservar `asyncio.to_thread` solo para el camino que sí puede golpear la red (JWKS no cacheado o `kid` desconocido).
 - **Por qué importa:** No es incorrecto — solo consume hilos del *executor* compartido más de lo necesario. Con tráfico alto podría convertirse en un cuello de botella; con el volumen esperado de una herramienta interna, es una optimización opcional, no urgente.
+- **Resolución:** Nuevo método `_cached_signing_key()` que consulta `PyJWKClient.jwk_set_cache.get()` (in-memory, no toca red) antes de recurrir a `asyncio.to_thread`; el salto a hilo solo ocurre si la clave no está ya cacheada. Añadido `test_validate_with_cached_kid_does_not_fetch_jwks_again`.
 
 ---
 
@@ -50,12 +54,12 @@ El PR implementa la validación de tokens de acceso de Microsoft Entra ID en el 
 
 ## Resumen de hallazgos
 
-| Severidad | Cantidad |
-|-----------|----------|
-| 🔴 BLOQUEANTE | 0 |
-| 🟡 IMPORTANTE | 1 |
-| 🔵 SUGERENCIA | 1 |
-| ✅ DESTACADO | 2 |
+| Severidad | Cantidad | Resueltos |
+|-----------|----------|-----------|
+| 🔴 BLOQUEANTE | 0 | — |
+| 🟡 IMPORTANTE | 1 | 1 |
+| 🔵 SUGERENCIA | 1 | 1 |
+| ✅ DESTACADO | 2 | — |
 
 **Recomendación final:**
-🟡 **APROBAR CON SUGERENCIAS** — Sin bloqueantes. El hallazgo IMPORTANTE (traza ausente en el handler de 500) es barato de corregir y vale la pena resolverlo antes de mergear, ya que afecta directamente a la capacidad de depurar fallos en producción; la sugerencia de rendimiento puede abordarse más adelante si el tráfico lo justifica.
+~~🟡 **APROBAR CON SUGERENCIAS**~~ → ✅ **APROBAR** — Los 2 hallazgos accionables se han corregido: el handler de 500 ahora registra la traza completa (`exc_info`), y el validador evita el salto a hilo cuando la clave del JWKS ya está en caché. Verificado con `ruff`, `mypy --strict` y `pytest`: **38/38 tests en verde** (37 originales + 1 nuevo).

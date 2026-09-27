@@ -101,6 +101,20 @@ async def test_validate_with_unknown_kid_refreshes_jwks_at_most_once_per_interva
     assert jwks_client.fetch_count == 2
 
 
+async def test_validate_with_cached_kid_does_not_fetch_jwks_again(
+    validator: EntraIdAccessTokenValidator, jwks_client: LocalJwksClient
+) -> None:
+    # Arrange: primera validación puebla la caché (una descarga)
+    await validator.validate(make_token())
+    assert jwks_client.fetch_count == 1
+
+    # Act: mismo kid ya cacheado
+    await validator.validate(make_token())
+
+    # Assert: no hace falta ir a la red ni al hilo (plan D5 / sugerencia de rendimiento)
+    assert jwks_client.fetch_count == 1
+
+
 async def test_validate_when_jwks_unreachable_raises_keys_unavailable() -> None:
     # Arrange
     jwks_client = LocalJwksClient(jwks_for(SIGNING_KEY))
