@@ -1745,8 +1745,8 @@ CREATE TABLE prompt_template (
 
 | Campo | Valor |
 |---|---|
-| **Estado** | 01.DESIGN |
-| **Tiempo invertido** | 1h 0m |
+| **Estado** | 02.DEVELOPS |
+| **Tiempo invertido** | 5h 0m |
 | **Estimación** | — |
 | **Relacionado con** | — |
 
