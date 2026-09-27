@@ -1,7 +1,25 @@
 {
   "version": "2.0",
-  "ultimo_actualizado": "2026-09-27T19:45:00",
+  "ultimo_actualizado": "2026-09-27T20:10:00",
   "consumo": [
+    {
+      "issue": "ESP-13",
+      "fecha": "2026-09-27T19:42:28",
+      "modelos": [
+        {
+          "skill": "analisis-spec",
+          "modelo": "claude-sonnet-5",
+          "tokens": {
+            "input": 86,
+            "output": 27154,
+            "cache_read": 3478506,
+            "cache_write_5m": 0,
+            "cache_write_1h": 251557
+          },
+          "tiempo": "189.0s"
+        }
+      ]
+    },
     {
       "issue": "ESP-14",
       "fecha": "2026-09-27T19:32:47",
@@ -53,6 +71,24 @@
             "cache_write_1h": 53162
           },
           "tiempo": "234.5s"
+        }
+      ]
+    },
+    {
+      "issue": "PR1",
+      "fecha": "2026-09-27T20:10:00",
+      "modelos": [
+        {
+          "skill": "pr-review",
+          "modelo": "claude-sonnet-5",
+          "tokens": {
+            "input": 17,
+            "output": 18397,
+            "cache_read": 4089835,
+            "cache_write_5m": 0,
+            "cache_write_1h": 52532
+          },
+          "tiempo": "217.4s"
         }
       ]
     }
