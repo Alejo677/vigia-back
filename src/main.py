@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +13,15 @@ from src.api.v1.api_router import protected_router
 from src.api.v1.routers import health
 from src.core.configuration.settings import Settings, get_settings
 from src.core.exceptions.handlers import register_exception_handlers
+from src.infrastructure.postgresql.connection import PostgreSQLConnection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    await PostgreSQLConnection.close()
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -26,7 +35,7 @@ def create_app(settings: Settings) -> FastAPI:
     Returns:
         Aplicación FastAPI.
     """
-    app = FastAPI(title="OneWatch API")
+    app = FastAPI(title="OneWatch API", lifespan=_lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins(),

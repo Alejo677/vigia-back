@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "ultimo_actualizado": "2026-09-27T20:10:00",
+  "ultimo_actualizado": "2026-10-02T18:54:23",
   "consumo": [
     {
       "issue": "ESP-13",
@@ -89,6 +89,42 @@
             "cache_write_1h": 52532
           },
           "tiempo": "217.4s"
+        }
+      ]
+    },
+    {
+      "issue": "ESP-06",
+      "fecha": "2026-09-27T22:28:23",
+      "modelos": [
+        {
+          "skill": "analisis-spec",
+          "modelo": "claude-opus-5-5",
+          "tokens": {
+            "input": 40,
+            "output": 29592,
+            "cache_read": 2765862,
+            "cache_write_5m": 0,
+            "cache_write_1h": 170787
+          },
+          "tiempo": "292.3s"
+        }
+      ]
+    },
+    {
+      "issue": "General",
+      "fecha": "2026-10-02T18:54:23",
+      "modelos": [
+        {
+          "skill": "listar-issues",
+          "modelo": "claude-sonnet-5-5",
+          "tokens": {
+            "input": 12,
+            "output": 1734,
+            "cache_read": 277701,
+            "cache_write_5m": 0,
+            "cache_write_1h": 35339
+          },
+          "tiempo": "20.0s"
         }
       ]
     }

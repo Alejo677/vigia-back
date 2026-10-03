@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     entra_api_client_id: str
     entra_api_scope: str = DEFAULT_API_SCOPE
     cors_allowed_origins: str = ""
+    database_url: str
 
     def access_token_policy(self) -> AccessTokenPolicy:
         """Política de validación de los tokens de acceso del tenant.

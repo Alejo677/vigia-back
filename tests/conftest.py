@@ -4,6 +4,7 @@ import os
 os.environ.setdefault("ENTRA_TENANT_ID", "11111111-1111-1111-1111-111111111111")
 os.environ.setdefault("ENTRA_API_CLIENT_ID", "33333333-3333-3333-3333-333333333333")
 os.environ.setdefault("CORS_ALLOWED_ORIGINS", "http://localhost:4200")
+os.environ.setdefault("DATABASE_URL", "postgresql://onewatch:onewatch@localhost:5432/onewatch_test")
 
 from collections.abc import Iterator
 
